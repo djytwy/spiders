@@ -11,19 +11,29 @@ import fake_useragent
 
 
 class Spider(object):
-
+    """
+    百姓网爬虫，需要人工干预来解决九宫格验证码问题
+    burst:一次的并发请求数量
+    change_cookie:用于判断是否需要启动浏览器过九宫格验证码
+    sleep_time_min: 发送完burst数量的请求后休眠时间的最小值
+    sleep_time_max: 发送完burst数量的请求后休眠时间的最大值
+    error_url:跳验证码的url传给浏览器打开
+    """
     def __init__(self):
+ 
         ua = fake_useragent.UserAgent()
-        self.ua_list = [ua.random for i in range(200)]
+        self.ua_list = [ua.random for i in range(300)]
         self.redis_con = redis.ConnectionPool(
-            host="xxx.xxx.xxx.xxx", port=6379, db=12)
+            host="xxx", port=6379, db=1)
         self.r_db = redis.StrictRedis(connection_pool=self.redis_con)
         self.cookies_pool = [
-
+            "suid=4488859312; __admx_track_id=bvRi7-b_5hNR95FRxYkgzQ; __admx_track_id.sig=n3iY8rS_b02OZw4dpBWfh6VeTNA; __trackId=154588196450645; __uuid=115458819649530.a187a; _ga=GA1.2.1818966348.1545881966; agreedUserPrivacy=1; __chat_udid=ae091516-ee0b-4a34-96e2-539c81faa044; __s=f2cqnm56ml93p8vm56sbu7ui80; _gid=GA1.2.77759446.1553168304; Hm_lvt_5a727f1b4acc5725516637e03b07d3d2=1553168304,1553220219,1553222217; __city=chongqing; __area2=zhuanglang; _auth_redirect=http%3A%2F%2Fzhangye.baixing.com%2Fqiufang%2Fa1236600968.html%3Ffrom%3Dregular; Hm_lpvt_5a727f1b4acc5725516637e03b07d3d2=1553239931; __sense_session_pv=1; _gat=1"
         ]
         self.change_cookie = False
         self.error_url = None
         self.burst = 100
+        self.sleep_time_min = 10
+        self.sleep_time_max = 60
 
     def get_headers(self):
         headers = {
@@ -39,7 +49,7 @@ class Spider(object):
             cookies[each[0].replace(" ", "")] = each[1].replace(" ", "")
         return cookies
 
-    async def get(self, url):
+    async def get_baixing(self, url):
         async with aiohttp.ClientSession(cookies=self.get_cookies()) as session:
             async with session.get(url, headers=self.get_headers()) as res:
                 if res.history:
@@ -61,27 +71,12 @@ class Spider(object):
         except Exception as e:
             self.r_db.lpush("have_none_next", url)
 
-    def asy_http(self, url_list):
+    def start_request(self, url_list):
         loop = asyncio.get_event_loop()
-        tasks = [asyncio.ensure_future(self.get(i)) for i in url_list]
+        tasks = [asyncio.ensure_future(self.get_baixing(i)) for i in url_list]
         loop.run_until_complete(asyncio.wait(tasks))
 
-    def start(self):
-        import time
-        while True:
-            url_list = self.get_100_urls()
-            if url_list:
-                self.asy_http(url_list)
-            else:
-                break
-            if self.change_cookie:
-                self.del_ban()
-            time_sleep = random.randint(10, 60)
-            print("sleep {0}...".format(time_sleep))
-            time.sleep(time_sleep)
-        print("over !")
-
-    def get_100_urls(self):
+    def get_urls(self):
         url_list = self.r_db.lrange("baixingwang_url", 1, self.burst)
         self.r_db.ltrim("baixingwang_url", self.burst + 1, -1)
         re_url = []
@@ -180,9 +175,27 @@ class Spider(object):
                 self.r_db.hset("succ_logs", each["url"], 200)
             except Exception as e:
                 print(e)
+    
+    def start(self):
+        import time
+        while True:
+            url_list = self.get_urls()
+            if url_list:
+                self.start_request(url_list)
+            else:
+                break
+            if self.change_cookie:
+                self.del_ban()
+            time_sleep = random.randint(self.sleep_time_min, self.sleep_time_max)
+            print("sleep {0}...".format(time_sleep))
+            time.sleep(time_sleep)
+        print("over !")
 
 
 class Write_Excel(Spider):
+    """
+    从redis拉数据生成execl表格    
+    """
     def __init__(self):
         super().__init__()
 
@@ -215,6 +228,6 @@ def run():
     excel = Write_Excel()
     excel.write_to_excel()
 
+
 if __name__ == "__main__":
     run()
-    # spider.temp()
