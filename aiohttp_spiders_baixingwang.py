@@ -19,21 +19,33 @@ class Spider(object):
     sleep_time_max: 发送完burst数量的请求后休眠时间的最大值
     error_url:跳验证码的url传给浏览器打开
     """
+
     def __init__(self):
- 
-        ua = fake_useragent.UserAgent()
-        self.ua_list = [ua.random for i in range(300)]
+        try:
+            """
+            fake_useragent 可能会缓存不下来请求头
+            """
+            ua = fake_useragent.UserAgent()
+            self.ua_list = [ua.random for i in range(300)]
+        except Exception as e:
+            self.ua_list = [
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:65.0) Gecko/20100101 Firefox/65.0",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/72.0.3626.81 Safari/537.36",
+                "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36 SE 2.X MetaSr 1.0",
+                "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.3497.100 Safari/537.36 QIHU 360EE"
+            ]
         self.redis_con = redis.ConnectionPool(
-            host="xxx", port=6379, db=1)
+            host="192.168.200.52", port=6379, db=12)
         self.r_db = redis.StrictRedis(connection_pool=self.redis_con)
         self.cookies_pool = [
-            "suid=4488859312; __admx_track_id=bvRi7-b_5hNR95FRxYkgzQ; __admx_track_id.sig=n3iY8rS_b02OZw4dpBWfh6VeTNA; __trackId=154588196450645; __uuid=115458819649530.a187a; _ga=GA1.2.1818966348.1545881966; agreedUserPrivacy=1; __chat_udid=ae091516-ee0b-4a34-96e2-539c81faa044; __s=f2cqnm56ml93p8vm56sbu7ui80; _gid=GA1.2.77759446.1553168304; Hm_lvt_5a727f1b4acc5725516637e03b07d3d2=1553168304,1553220219,1553222217; __city=chongqing; __area2=zhuanglang; _auth_redirect=http%3A%2F%2Fzhangye.baixing.com%2Fqiufang%2Fa1236600968.html%3Ffrom%3Dregular; Hm_lpvt_5a727f1b4acc5725516637e03b07d3d2=1553239931; __sense_session_pv=1; _gat=1"
+            "suid=4488859312; __admx_track_id=bvRi7-b_5hNR95FRxYkgzQ; __admx_track_id.sig=n3iY8rS_b02OZw4dpBWfh6VeTNA; __trackId=154588196450645; __uuid=115458819649530.a187a; _ga=GA1.2.1818966348.1545881966; agreedUserPrivacy=1; __chat_udid=ae091516-ee0b-4a34-96e2-539c81faa044; __s=f2cqnm56ml93p8vm56sbu7ui80; Hm_lvt_5a727f1b4acc5725516637e03b07d3d2=1553168304,1553220219,1553222217; __city=chongqing; __area2=tongwei; _gid=GA1.2.989251167.1553479553; _auth_redirect=http%3A%2F%2Fchongqing.baixing.com%2Fershoufang%2F%3Fsrc%3Dtopbar; __sense_session_pv=1; Hm_lpvt_5a727f1b4acc5725516637e03b07d3d2=1553517296; _gat=1"
         ]
+        self.redis_class = "BXW"
         self.change_cookie = False
         self.error_url = None
         self.burst = 100
-        self.sleep_time_min = 10
-        self.sleep_time_max = 60
+        self.sleep_time_min = 5
+        self.sleep_time_max = 12
 
     def get_headers(self):
         headers = {
@@ -52,7 +64,7 @@ class Spider(object):
     async def get_baixing(self, url):
         async with aiohttp.ClientSession(cookies=self.get_cookies()) as session:
             async with session.get(url, headers=self.get_headers()) as res:
-                if res.history:
+                if "spider" in str(res.url):
                     self.change_cookie = True
                     self.error_url = url
                     self.save_logs(url, res.status, res.history[0].status)
@@ -69,7 +81,7 @@ class Spider(object):
                 if len(url.split("?")) < 3:
                     self.save_urls_redis("{0}?page={1}".format(url, i))
         except Exception as e:
-            self.r_db.lpush("have_none_next", url)
+            self.r_db.lpush("{0}:have_none_next".format(self.redis_class), url)
 
     def start_request(self, url_list):
         loop = asyncio.get_event_loop()
@@ -77,8 +89,12 @@ class Spider(object):
         loop.run_until_complete(asyncio.wait(tasks))
 
     def get_urls(self):
-        url_list = self.r_db.lrange("baixingwang_url", 1, self.burst)
-        self.r_db.ltrim("baixingwang_url", self.burst + 1, -1)
+        url_list = self.r_db.lrange(
+            "{0}:url_list".format(
+                self.redis_class), 0, self.burst)
+        self.r_db.ltrim(
+            "{0}:url_list".format(
+                self.redis_class), self.burst + 1, -1)
         re_url = []
         for i in url_list:
             if type(i) == bytes:
@@ -92,13 +108,13 @@ class Spider(object):
         url_list = root.xpath('//li[contains(@class,"listing-ad")]/a/@href')
         if url_list:
             self.next_page(url, root)
-            [self.save_urls_redis(i,"detail_page") for i in url_list]
+            [self.save_urls_redis(i, "detail_page") for i in url_list]
         else:
             self.save_detail(url, root)
 
     def save_urls_redis(self, url, page_type="list_page"):
-        if not self.r_db.hget("succ_logs", url) and page_type == "detail_page":
-            self.r_db.lpush("baixingwang_url", url)
+        if not self.r_db.hget("{0}:succ_logs".format(self.redis_class), url) and page_type == "detail_page":
+            self.r_db.lpush("{0}:url_list".format(self.redis_class), url)
 
     def save_detail(self, url, root):
         data = {}
@@ -117,33 +133,57 @@ class Spider(object):
                 "//p[@id='mobileNumber']/strong/text()")[0]
         except Exception as e:
             pass
-        if 'phone' in data:
-            self.r_db.lpush("detail_msg", data)
+        if 'phone' in data and not self.r_db.hget("{0}:phone_list".format(self.redis_class), data['phone']):
+            self.r_db.lpush("{0}:new_data".format(self.redis_class), data)
+            self.r_db.lpush("{0}:detail_msg".format(self.redis_class), data)
+            self.r_db.hset("{0}:phone_list".format(self.redis_class), data['phone'], 200)
         else:
-            self.r_db.lpush("expired_msg", data)
+            self.r_db.lpush("{0}:expired_msg".format(self.redis_class), data)
 
     def save_logs(self, url, status, status_history=200):
+        from datetime import datetime as dt
         if status == 200 and status_history == 200:
-            self.r_db.hset("succ_logs", url, status)
+            today = str(dt.today()).split(" ")[0]
+            self.r_db.hset(
+                "{0}:{1}".format(
+                    self.redis_class,
+                    today),
+                url,
+                status)
+            self.r_db.hset(
+                "{0}:succ_logs".format(
+                    self.redis_class), url, status)
         else:
-            self.r_db.hset("err_logs", url, status_history)
-            self.r_db.lpush("baixingwang_url", url)
+            self.r_db.hset(
+                "{0}:err_logs".format(
+                    self.redis_class),
+                url,
+                status_history)
+            self.r_db.lpush("{0}:url_list".format(self.redis_class), url)
 
     @staticmethod
     def parse_html(html):
         return etree.HTML(html, etree.HTMLParser(encoding='utf-8'))
 
     def add_data(self):
-        with open("baixing_urls.txt", "r") as f:
-            file = f.read()
-            file = file.split(",")
-            for i in file:
-                i = i.replace("'", "").replace(" ", "")
-                url = "http://{0}.baixing.com/qiufang/m178892/".format(i)
-                url2 = "http://{0}.baixing.com/qiufang/m178893/".format(i)
-                self.r_db.lpush("baixingwang_url", url)
-                self.r_db.lpush("baixingwang_url", url2)
-        f.close()
+        from datetime import datetime as dt
+        t = "{0}-{1}-{2}".format(dt.today().year,
+                                 dt.today().month, dt.today().day)
+        if self.r_db.hset('{0}:flag'.format(self.redis_class), t, "flag"):
+            self.r_db.delete("{0}:new_data".format(self.redis_class))
+            with open("baixing_urls.txt", "r") as f:
+                file = f.read()
+                file = file.split(",")
+                for i in file:
+                    i = i.replace("'", "").replace(" ", "")
+                    url = "http://{0}.baixing.com/qiufang/m178892/".format(i)
+                    url2 = "http://{0}.baixing.com/qiufang/m178893/".format(i)
+                    self.r_db.lpush(
+                        "{0}:url_list".format(
+                            self.redis_class), url)
+                    self.r_db.lpush(
+                        "{0}:url_list".format(
+                            self.redis_class), url2)
 
     def del_ban(self):
         from selenium import webdriver
@@ -166,16 +206,21 @@ class Spider(object):
                 time.sleep(1)
             except Exception as e:
                 print("浏览器关闭")
+                break
+        self.change_cookie = False
+        self.error_url = None
 
-    def temp(self):
-        succ_msg = self.r_db.lrange("detail_msg", 0, -1)
-        for each in succ_msg:
+    def debug(self):
+        f_data = self.r_db.lrange("BXW:expired_msg", 0, -1)
+        s_data = self.r_db.lrange('BXW:detail_msg', 0, -1)
+        # for each in f_data:
+        #     each = eval(each)
+        #     self.r_db.hset("BXW:succ_logs", each["url"], 200)
+        for each in s_data:
             each = eval(each)
-            try:
-                self.r_db.hset("succ_logs", each["url"], 200)
-            except Exception as e:
-                print(e)
-    
+            self.r_db.hset("BXW:phone_list", each["phone"], 200)
+            # self.r_db.hset("BXW:succ_logs", each["url"], 200)
+
     def start(self):
         import time
         while True:
@@ -186,47 +231,20 @@ class Spider(object):
                 break
             if self.change_cookie:
                 self.del_ban()
-            time_sleep = random.randint(self.sleep_time_min, self.sleep_time_max)
+            time_sleep = random.randint(
+                self.sleep_time_min, self.sleep_time_max)
             print("sleep {0}...".format(time_sleep))
             time.sleep(time_sleep)
         print("over !")
 
 
-class Write_Excel(Spider):
-    """
-    从redis拉数据生成execl表格    
-    """
-    def __init__(self):
-        super().__init__()
-
-    def get_data(self):
-        return self.r_db.lrange("detail_msg", 0, -1)
-
-    def write_to_excel(self):
-        import openpyxl
-        wb = openpyxl.load_workbook('百姓网求租求购.xlsx')
-        sheet = wb.get_active_sheet()
-        sheet["A1"] = "标题"
-        sheet["B1"] = "描述"
-        sheet["C1"] = "城市"
-        sheet["D1"] = "网页链接"
-        sheet["E1"] = "电话"
-        data = self.get_data()
-        for each in data:
-            try:
-                each = eval(each)
-                sheet.append([each['title'], each['desc'],
-                              each['city'], each['url'], each['phone']])
-            except Exception as e:
-                print(each)
-        wb.save("ty.xlsx")
-
 def run():
     spider = Spider()
     spider.add_data()
     spider.start()
-    excel = Write_Excel()
-    excel.write_to_excel()
+    # spider.debug()
+    # excel = Write_Excel()
+    # excel.write_to_excel('百姓网求租求购.xlsx')
 
 
 if __name__ == "__main__":
