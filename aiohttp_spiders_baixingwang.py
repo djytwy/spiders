@@ -211,15 +211,10 @@ class Spider(object):
         self.error_url = None
 
     def debug(self):
-        f_data = self.r_db.lrange("BXW:expired_msg", 0, -1)
         s_data = self.r_db.lrange('BXW:detail_msg', 0, -1)
-        # for each in f_data:
-        #     each = eval(each)
-        #     self.r_db.hset("BXW:succ_logs", each["url"], 200)
         for each in s_data:
             each = eval(each)
             self.r_db.hset("BXW:phone_list", each["phone"], 200)
-            # self.r_db.hset("BXW:succ_logs", each["url"], 200)
 
     def start(self):
         import time
@@ -243,9 +238,7 @@ def run():
     spider.add_data()
     spider.start()
     # spider.debug()
-    # excel = Write_Excel()
-    # excel.write_to_excel('百姓网求租求购.xlsx')
-
+    
 
 if __name__ == "__main__":
     run()
