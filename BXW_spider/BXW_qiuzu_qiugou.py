@@ -52,20 +52,22 @@ class Spider(Mixin_utils):
                     self.save_logs(url, res.status, res.history[0].status)
                 else:
                     html = await res.text()
-                    self.save_logs(url, res.status)
-                    self.save_data(url, html)
+                    if not ("m178893" in url or "m178892" in url):
+                        self.save_logs(url, res.status)
+                    self.save_data(url, html, res.history)
 
     def start_request(self, url_list):
         loop = asyncio.get_event_loop()
         tasks = [asyncio.ensure_future(self.get_baixing(i, url_list)) for i in url_list]
         loop.run_until_complete(asyncio.wait(tasks))
 
-    def save_data(self, url, html):
+    def save_data(self, url, html, status=None):
         root = self.parse_html(html)
-        if root == None:
-            print(url)
+        if root == None or "Too Many Requests" in html or status:
+            print("请求失败的URL：{0}".format(url))
         else:
-            url_list = root.xpath('//ul/li[contains(@class,"listing-ad")]/div[@class="media-body"]/div[1]/a[1]')
+            url_list = root.xpath('//ul/li[contains(@class,"listing-ad")]/div[@class="media-body"]/div[1]/a[1]') \
+                       or root.xpath('//ul/li[contains(@class,"listing-ad")]/a')
             if url_list:
                 self.next_page(url, root)
                 for i in url_list :
@@ -108,7 +110,7 @@ class Spider(Mixin_utils):
                 self.r_db.lpush("{0}:new_data".format(self.redis_class), data)
                 self.r_db.hset("{0}:phone_list".format(self.redis_class), data['phone'], 200)
                 print("新鲜数据：{0}".format(data['url']))
-                self.r_db.lpush("{0}:detail_msg".format(self.redis_class), data)
+                self.r_db.hset("{0}:all_msg".format(self.redis_class), data['url'], data)
             else:
                 print("不符合标准的有效数据：{0}: {1} 链接：{2}".format(data["class"], data["time"], url))
         else:
@@ -139,13 +141,14 @@ class Spider(Mixin_utils):
                 status)
             self.r_db.hset(
                 "{0}:succ_logs".format(
-                    self.redis_class), url, status)
+                    self.redis_class), url.split("?")[0], status)
         else:
             self.r_db.hset(
                 "{0}:err_logs".format(
                     self.redis_class),
                 url,
-                status_history)
+                status_history or status)
+            print("出错的URL:{0}, 重新入库。。。。。".format(url))
             self.r_db.lpush("{0}:url_list".format(self.redis_class), url)
 
     def del_ban(self):
@@ -184,6 +187,8 @@ class Spider(Mixin_utils):
             if url_list:
                 self.start_request(url_list)
             else:
+                print("符合标准的数据已经抓取完毕！程序将在3秒后关闭！")
+                time.sleep(3)
                 break
         print("over !")
 
@@ -215,10 +220,6 @@ def run():
         spider = Spider(50, "BXW")
     spider.add_data()
     spider.start_with_proxy()
-    # spider.debug()
-    # excel = Write_Excel()
-    # excel.write_to_excel('百姓网求租求购.xlsx')
-
 
 if __name__ == "__main__":
     run()
