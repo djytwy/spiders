@@ -1,0 +1,13 @@
+{
+  "scripts": {
+    "start": "tsc && node ./dist/js_spider/run.js"
+  },
+  "dependencies": {
+    "@types/ioredis": "^4.0.12",
+    "@types/puppeteer": "^1.12.4",
+    "axios": "^0.19.0",
+    "fs": "^0.0.1-security",
+    "ioredis": "^4.10.0",
+    "puppeteer": "^1.17.0"
+  }
+}
