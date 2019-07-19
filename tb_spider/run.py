@@ -5,7 +5,6 @@
 file: run.py.py
 time: 2019/6/20 11:42
 Author: twy
-contact: 19983195362
 des: 淘宝爬虫的入口函数
 """
 
@@ -39,6 +38,9 @@ def gen_img_url():
 
 
 def run():
+    """
+    多进程爬取
+    """
     process_list = []
 
     p_http_get = Process(target=http_get)
