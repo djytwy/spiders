@@ -58,8 +58,8 @@ const run = async () => {
     await page.waitFor(1000);
     await page.click('#J_Quick2Static');
     await page.waitFor(1000);
-    await page.type('#TPL_username_1','ttbbbl',{delay: 150});
-    await page.type('#TPL_password_1','twy930107',{delay: 150});
+    await page.type('#TPL_username_1','账号',{delay: 150});
+    await page.type('#TPL_password_1','密码',{delay: 150});
     while(true) {
         if( await page.$('#nc_1__scale_text > span > b') ) {
             break
@@ -68,7 +68,7 @@ const run = async () => {
     }
     await page.waitFor(3000);
 
-    const key_words = ['青瓷','黑瓷', '白瓷', '青白瓷', '色釉瓷', '彩绘瓷'];
+    const key_words = ['关键词1', '关键词2', '关键词3'];
     for(let key_word of key_words) {
         await page.goto('https://www.taobao.com/?spm=a230r.1.0.0.3b40f277ET1kBS');
         await page.type('#q',key_word, {delay:200});
