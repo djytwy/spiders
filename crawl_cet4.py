@@ -45,8 +45,14 @@ class CetSpider(Tools):
         self._username_list = username_list
         self._burst = burst
         self._image_num_max = image_num_max
-        self._header_list = [{"User-Agent": random.choice(self.gen_random_ua()),
-                             'Referer': 'http://cet.neea.edu.cn/cet/'}]
+        self._header_list = [
+            {
+                "User-Agent": random.choice(self.gen_random_ua()),
+                'Referer': 'http://cet.neea.edu.cn/cet/'
+            }
+        ]
+        if not os.path.exists(self._path):
+            os.mkdir(self._path)
 
     async def http_get(self, url, redis_key):
         """
@@ -125,11 +131,11 @@ class CetSpider(Tools):
                 self.gen_url()
                 print('生成图片链接休眠10秒....')
                 time.sleep(10)
-    
+
     def is_over_images_num(self):
         """
         判断图片数量是否已满足要求
-        :return: 
+        :return:
         """
         _now_images_list = list(filter(lambda x: '.png' in x, os.listdir(self._path)))
         return True if len(_now_images_list) > self._image_num_max else False
@@ -148,7 +154,7 @@ class CetSpider(Tools):
                 self.redis_con.ltrim('image_data_list', 0, -1)
                 str_dic = ['a', 'b', 'c', 'd', 'e', 'f']
                 for image in _image_data:
-                    with open(f'./images/{random.choice(str_dic)}{random.randint(0,10000000)}.png', 'wb') as f:
+                    with open(f'{self._path}/{random.choice(str_dic)}{random.randint(0,10000000)}.png', 'wb') as f:
                         f.write(image)
                 print('生成图片链接休眠10秒....')
                 time.sleep(10)
