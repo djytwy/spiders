@@ -16,12 +16,14 @@ import redis
 import fake_useragent
 import threading
 import re
+import os
+
 
 class Tools:
     '''
     工具类，主要是Redis连接,ua
     '''
-    def __init__(self,redis_host,redis_port):
+    def __init__(self, redis_host, redis_port):
         _redis_pool = redis.ConnectionPool(host=redis_host,port=redis_port)
         self.redis_con = redis.StrictRedis(connection_pool=_redis_pool)
 
@@ -36,12 +38,14 @@ class CetSpider(Tools):
     '''
     爬虫类
     '''
-    def __init__(self, burst, redis_host, redis_port, username_list):
+    def __init__(self, burst, redis_host, redis_port, username_list, path="./images", image_num_max=5000):
         super().__init__(redis_host=redis_host, redis_port=redis_port)
         self.base_url = 'http://cache.neea.edu.cn/Imgs.do?c=CET&ik='
-        self.username_list = username_list
-        self.burst = burst
-        self.header_list = [{"User-Agent": random.choice(self.gen_random_ua()),
+        self._path = path
+        self._username_list = username_list
+        self._burst = burst
+        self._image_num_max = image_num_max
+        self._header_list = [{"User-Agent": random.choice(self.gen_random_ua()),
                              'Referer': 'http://cet.neea.edu.cn/cet/'}]
 
     async def http_get(self, url, redis_key):
@@ -52,7 +56,7 @@ class CetSpider(Tools):
         :return:
         """
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=random.choice(self.header_list)) as response:
+            async with session.get(url, headers=random.choice(self._header_list)) as response:
                 if response.status == 200:
                     _data = await response.read()
                     self.redis_con.lpush(redis_key, _data)
@@ -63,7 +67,7 @@ class CetSpider(Tools):
         :return:
         """
         _temp_url_list = [
-            f'{self.base_url}{random.choice(self.username_list)}&t={random.random()}' for i in range(self.burst)]
+            f'{self.base_url}{random.choice(self._username_list)}&t={random.random()}' for i in range(self._burst)]
         for i in _temp_url_list:
             self.redis_con.lpush('image_name_url_list', i)
 
@@ -94,21 +98,41 @@ class CetSpider(Tools):
         :return:
         """
         while True:
-            asyncio.run(self.gen_image_url())
-            print('爬取图片链接线程休眠10秒....')
-            time.sleep(10)
+            if self.is_over_images_num():
+                print('生成一级连接的线程休眠....')
+                time.sleep(600)
+            else:
+                asyncio.run(self.gen_image_url())
+                print('爬取图片链接线程休眠10秒....')
+                time.sleep(10)
 
     def crawl_image(self):
         while True:
-            asyncio.run(self.get_image_data())
-            print('获取图片数据线程休眠10秒...')
-            time.sleep(10)
+            if self.is_over_images_num():
+                print('爬取验证码线程休眠...')
+                time.sleep(600)
+            else:
+                asyncio.run(self.get_image_data())
+                print('获取图片数据线程休眠10秒...')
+                time.sleep(10)
 
     def start_gen_url(self):
         while True:
-            self.gen_url()
-            print('生成图片链接休眠10秒....')
-            time.sleep(10)
+            if self.is_over_images_num():
+                print('验证码数量已经有5000张了，暂停爬取....')
+                time.sleep(600)
+            else:
+                self.gen_url()
+                print('生成图片链接休眠10秒....')
+                time.sleep(10)
+    
+    def is_over_images_num(self):
+        """
+        判断图片数量是否已满足要求
+        :return: 
+        """
+        _now_images_list = list(filter(lambda x: '.png' in x, os.listdir(self._path)))
+        return True if len(_now_images_list) > self._image_num_max else False
 
     def save_image(self):
         """
@@ -116,14 +140,18 @@ class CetSpider(Tools):
         :return:
         """
         while True:
-            _image_data = self.redis_con.lrange('image_data_list', 0, -1)
-            self.redis_con.ltrim('image_data_list', 0, -1)
-            str_dic = ['a', 'b', 'c', 'd', 'e', 'f']
-            for image in _image_data:
-                with open(f'./images/{random.choice(str_dic)}{random.randint(0,10000000)}.png', 'wb') as f:
-                    f.write(image)
-            print('生成图片链接休眠10秒....')
-            time.sleep(10)
+            if self.is_over_images_num():
+                print('保存图片的连接休眠...')
+                time.sleep(600)
+            else:
+                _image_data = self.redis_con.lrange('image_data_list', 0, -1)
+                self.redis_con.ltrim('image_data_list', 0, -1)
+                str_dic = ['a', 'b', 'c', 'd', 'e', 'f']
+                for image in _image_data:
+                    with open(f'./images/{random.choice(str_dic)}{random.randint(0,10000000)}.png', 'wb') as f:
+                        f.write(image)
+                print('生成图片链接休眠10秒....')
+                time.sleep(10)
 
     def run(self):
         _gen_image_url = threading.Thread(target=self.crawl_image_url)
@@ -141,7 +169,7 @@ class CetSpider(Tools):
 
 
 if __name__ == "__main__":
-    username_list = ['372611122107828']
-    s = CetSpider(redis_port=8888, redis_host='xxxx', burst=3, username_list=username_list)
+    my_list = ['372611122107828', '510032122103410', '510032122103415', '510032122103413', '410032122103414']
+    s = CetSpider(redis_port=9736, redis_host='106.12.117.245', burst=3, username_list=my_list)
     s.run()
 
