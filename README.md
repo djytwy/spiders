@@ -9,3 +9,6 @@
 
 ## tb_spider:
 使用puppeteer.js,作为浏览列表页和通过验证的方式，使用aiohttp作为图片的下载器，队列使用redis控制。
+
+## cet4_spider:
+使用Python 3.7编写的验证码爬虫，主要用到asyncio.run(),asyncio.gather()方法。
