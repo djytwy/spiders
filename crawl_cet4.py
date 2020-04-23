@@ -36,10 +36,10 @@ class CetSpider(Tools):
     '''
     爬虫类
     '''
-    def __init__(self, burst, redis_host, redis_port):
+    def __init__(self, burst, redis_host, redis_port, username_list):
         super().__init__(redis_host=redis_host, redis_port=redis_port)
         self.base_url = 'http://cache.neea.edu.cn/Imgs.do?c=CET&ik='
-        self.username_list = ['372611122107828']
+        self.username_list = username_list
         self.burst = burst
         self.header_list = [{"User-Agent": random.choice(self.gen_random_ua()),
                              'Referer': 'http://cet.neea.edu.cn/cet/'}]
@@ -141,6 +141,7 @@ class CetSpider(Tools):
 
 
 if __name__ == "__main__":
-    s = CetSpider(redis_port=8888, redis_host='xxxx', burst=3)
+    username_list = ['372611122107828']
+    s = CetSpider(redis_port=8888, redis_host='xxxx', burst=3, username_list=username_list)
     s.run()
 
